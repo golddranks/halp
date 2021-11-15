@@ -1,9 +1,12 @@
+#![feature(c_unwind)]
 use std::{ops::Not, sync::atomic::{AtomicBool, AtomicU32, Ordering}};
 
 mod gl;
 mod objc;
 
 use objc::{Id, NSUInteger, Sel, sel, class, msg, cstr, NSApp, NSInteger, Imp, NSRect, NSPoint, CGSize, FALSE, TRUE, NIL, NSDefaultRunLoopMode};
+
+use crate::objc::{make, msg_id, msg_void};
 
 
 static TERMINATED: AtomicBool = AtomicBool::new(false);
@@ -26,98 +29,45 @@ fn main() {
 
 	let alloc = sel!("alloc");
 	let init = sel!("init");
-
-	//NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
-	let NSAutoreleasePool = class!("NSAutoreleasePool");
-	let pool_alloc: Id = unsafe { msg!(NSAutoreleasePool, alloc) };
-	let pool: Id = unsafe { msg!(pool_alloc, init) };
-
-	//[NSApplication sharedApplication];
-	let NSApplication = class!("NSApplication");
-	let shared_application = sel!("sharedApplication");
-	let _: Id = unsafe { msg!(NSApplication, shared_application) };
-
-	//[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-	let set_activation_policy = sel!("setActivationPolicy:");
-	let _: () = unsafe { msg!(NSApp, set_activation_policy, NSInteger(0)) };
-
-	//AppDelegate * dg = [[AppDelegate alloc] init];
-	let NSObjectClass = class!("NSObject");
-	let AppDelegateClass = objc::allocate_class_pair(NSObjectClass, cstr!("AppDelegate"), 0);
-	let NSApplicationDelegate = objc::get_protocol(cstr!("NSApplicationDelegate"));
-	let resultAddProtoc = AppDelegateClass.add_protocol(NSApplicationDelegate);
-	assert!(resultAddProtoc.as_bool());
-	let applicationShouldTerminate = sel!("applicationShouldTerminate:");
-	let resultAddMethod = AppDelegateClass.add_method(applicationShouldTerminate, Imp::from_fn_1(application_should_terminate), cstr!("L@:@"));
-	assert!(resultAddMethod.as_bool());
-	let dg_alloc: Id = unsafe{ msg!(AppDelegateClass, alloc) };
-	let dg: Id = unsafe{ msg!(dg_alloc, init) };
-
 	let autorelease = sel!("autorelease");
-	let _: () = unsafe{ msg!(dg, autorelease) };
+    let pool_alloc = msg_id!("NSAutoreleasePool", alloc);
+    let pool = msg_id!(pool_alloc, init);
+	msg_id!("NSApplication", "sharedApplication");
+	msg_void!(NSApp, "setActivationPolicy:", NSInteger(0));
 
-	//[NSApp setDelegate:dg];
-    let setDelegate = sel!("setDelegate:");
-    let _: () = unsafe{ msg!(NSApp, setDelegate, dg) };
+    #[allow(non_snake_case)]
+	let AppDelegate = objc::allocate_class_pair(class!("NSObject"), cstr!("AppDelegate"), 0);
+	AppDelegate.add_protocol(
+        objc::get_protocol(cstr!("NSApplicationDelegate"))
+    ).assert_true();
+	AppDelegate.add_method(
+        sel!("applicationShouldTerminate:"),
+        Imp::from_fn_1(application_should_terminate),
+        cstr!("L@:@")
+    ).assert_true();
+
+    let dg = make!(AppDelegate);
+    msg_void!(NSApp, "setDelegate:", dg);
 
 	// only needed if we don't use [NSApp run]
-	//[NSApp finishLaunching];
-	let finishLaunching = sel!("finishLaunching");
-    let _: () = unsafe{ msg!(NSApp, finishLaunching) };
-
-	//id menubar = [[NSMenu alloc] init];
-    let NSMenuClass = class!("NSMenu");
-    let menubarAlloc: Id = unsafe{ msg!(NSMenuClass, alloc) };
-    let menubar: Id = unsafe{ msg!(menubarAlloc, init) };
-    let _: () = unsafe{ msg!(menubar, autorelease) };
-
-	//id appMenuItem = [[NSMenuItem alloc] init];
-	let NSMenuItemClass = class!("NSMenuItem");
-	let appMenuItemAlloc: Id = unsafe{ msg!(NSMenuItemClass, alloc) };
-	let appMenuItem: Id = unsafe{ msg!(appMenuItemAlloc, init) };
-    let _: () = unsafe{ msg!(appMenuItem, autorelease) };
-
-	//[menubar addItem:appMenuItem];
-	let addItem = sel!("addItem:");
-    let _: () = unsafe{ msg!(menubar, addItem, appMenuItem) };
-
-	//[NSApp setMainMenu:menubar];
-	let setMainMenu = sel!("setMainMenu:");
-	let _: Id = unsafe{ msg!(NSApp, setMainMenu, menubar) };
-
-	//id appMenu = [[NSMenu alloc] init];
-	let appMenuAlloc: Id = unsafe{ msg!(NSMenuClass, alloc) };
-	let appMenu: Id = unsafe{ msg!(appMenuAlloc, init) };
-    let _: () = unsafe{ msg!(appMenu, autorelease) };
-
-	//id appName = [[NSProcessInfo processInfo] processName];
-	let NSProcessInfoClass = class!("NSProcessInfo");
-	let processInfo = sel!("processInfo");
-	let processInfo: Id = unsafe{ msg!(NSProcessInfoClass, processInfo) };
-	let processName = sel!("processName");
-	let appName: Id = unsafe{ msg!(processInfo, processName) };
-
-	//id quitTitle = [@"Quit " stringByAppendingString:appName];
-	let NSStringClass = class!("NSString");
-	let stringWithUTF8String = sel!("stringWithUTF8String:");
-	let quitTitlePrefixString: Id = unsafe{ msg!(NSStringClass, stringWithUTF8String, cstr!("Quit ")) };
-	let stringByAppendingString = sel!("stringByAppendingString:");
-	let quitTitle: Id = unsafe { msg!(quitTitlePrefixString, stringByAppendingString, appName) };
-
-	//id quitMenuItem = [[NSMenuItem alloc] initWithTitle:quitTitle action:@selector(terminate:) keyEquivalent:@"q"];
-	let quitMenuItemKey: Id = unsafe { msg!(NSStringClass, stringWithUTF8String, cstr!("q")) };
-	let quitMenuItemAlloc: Id = unsafe { msg!(NSMenuItemClass, alloc) };
-	let initWithTitle = sel!("initWithTitle:action:keyEquivalent:");
+    msg_void!(NSApp, "finishLaunching");
+    let menubar = make!("NSMenu");
+	let app_menu_item = make!("NSMenuItem");
+    msg_void!(menubar, "addItem:", app_menu_item);
+	msg_id!(NSApp, "setMainMenu:", menubar);
+    let app_menu = make!("NSMenu");
+	let process_info = msg_id!("NSProcessInfo", "processInfo");
+	let app_name = msg_id!(process_info, "processName");
+	let quit_title_prefix_string = msg_id!("NSString", "stringWithUTF8String:", cstr!("Quit "));
+	let quit_title = msg_id!(quit_title_prefix_string, "stringByAppendingString:", app_name);
+	let quit_menu_item_key = msg_id!("NSString", "stringWithUTF8String:", cstr!("q"));
+	let quit_menu_item_alloc = msg_id!("NSMenuItem", alloc);
+	let init_with_title = sel!("initWithTitle:action:keyEquivalent:");
 	let terminate = sel!("terminate:");
-	let quitMenuItem: Id = unsafe { msg!(quitMenuItemAlloc, initWithTitle, quitTitle, terminate, quitMenuItemKey) };
-	let _: () = unsafe { msg!(quitMenuItem, autorelease) };
-
-	//[appMenu addItem:quitMenuItem];
-	let _: () = unsafe { msg!(appMenu, addItem, quitMenuItem) };
-
-	//[appMenuItem setSubmenu:appMenu];
-	let setSubmenu = sel!("setSubmenu:");
-	let _: () = unsafe { msg!(appMenuItem, setSubmenu, appMenu) };
+	let quit_menu_item = msg_id!(quit_menu_item_alloc, init_with_title, quit_title, terminate, quit_menu_item_key);
+	msg_void!(quit_menu_item, autorelease);
+	msg_void!(app_menu, "addItem:", quit_menu_item);
+	msg_void!(app_menu_item, "setSubmenu:", app_menu);
 
     
 	//id window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 500, 500) styleMask:NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask backing:NSBackingStoreBuffered defer:NO];
@@ -125,55 +75,31 @@ fn main() {
         origin: NSPoint {x: 0.0, y: 0.0},
         size: CGSize {width: 500.0, height: 500.0}
     };
-	let NSWindowClass = class!("NSWindow");
-	let windowAlloc: Id = unsafe { msg!(NSWindowClass, alloc) };
-	let initWithContentRect = sel!("initWithContentRect:styleMask:backing:defer:");
-	let window: Id = unsafe { msg!(windowAlloc, initWithContentRect, rect, NSUInteger(15), NSUInteger(2), FALSE) };
-	let _: () = unsafe { msg!(window, autorelease) };
+	let window_alloc = msg_id!("NSWindow", alloc);
+	let init_with_content_rect = sel!("initWithContentRect:styleMask:backing:defer:");
+	let window = msg_id!(window_alloc, init_with_content_rect, rect, NSUInteger(15), NSUInteger(2), FALSE);
+	msg_void!(window, autorelease);
 
 	// when we are not using ARC, than window will be added to autorelease pool
 	// so if we close it by hand (pressing red button), we don't want it to be released for us
 	// so it will be released by autorelease pool later
 	//[window setReleasedWhenClosed:NO];
-	let setReleasedWhenClosed = sel!("setReleasedWhenClosed:");
-    let _: () = unsafe { msg!(window, setReleasedWhenClosed, FALSE) };
-
+    msg_void!(window, "setReleasedWhenClosed:", FALSE);
 	WINDOW_COUNT.store(1, Ordering::Relaxed);
 
-	//WindowDelegate * wdg = [[WindowDelegate alloc] init];
-	let WindowDelegateClass = objc::allocate_class_pair(NSObjectClass, cstr!("WindowDelegate"), 0);
-    let NSWindowDelegateProtocol = objc::get_protocol(cstr!("NSWindowDelegate"));
-    let resultAddProtoc = WindowDelegateClass.add_protocol(NSWindowDelegateProtocol);
-	assert!(resultAddProtoc.as_bool());
-	let windowWillClose = sel!("windowWillClose:");
-	let resultAddMethod = WindowDelegateClass.add_method(windowWillClose, Imp::from_fn_1(window_will_close),  cstr!("v@:@"));
-	assert!(resultAddMethod.as_bool());
-	let wdgAlloc: Id = unsafe { msg!(WindowDelegateClass, alloc) };
-	let wdg: Id = unsafe { msg!(wdgAlloc, init) };
-	let _: () = unsafe { msg!(wdg, autorelease) };
-
-	//[window setDelegate:wdg];
-	let _: () = unsafe { msg!(window, setDelegate, wdg) };
-
-	//NSView * contentView = [window contentView];
-	let contentViewSel = sel!("contentView");
-	let contentView: Id = unsafe { msg!(window, contentViewSel) };
-
+    #[allow(non_snake_case)]
+	let WindowDelegateClass = objc::allocate_class_pair(class!("NSObject"), cstr!("WindowDelegate"), 0);
+    WindowDelegateClass.add_protocol(objc::get_protocol(cstr!("NSWindowDelegate"))).assert_true();
+	WindowDelegateClass.add_method(sel!("windowWillClose:"), Imp::from_fn_1(window_will_close),  cstr!("v@:@")).assert_true();
+	let wdg = make!(WindowDelegateClass);
+	msg_void!(window, "setDelegate:", wdg);
+	let content_view = msg_id!(window, "contentView");
 	// disable this if you don't want retina support
-	//[contentView setWantsBestResolutionOpenGLSurface:YES];
-	let setWantsBestResolutionOpenGLSurface = sel!("setWantsBestResolutionOpenGLSurface:");
-	let _: () = unsafe { msg!(contentView, setWantsBestResolutionOpenGLSurface, TRUE) };
-
-
-	//[window cascadeTopLeftFromPoint:NSMakePoint(20,20)];
+	msg_void!(content_view, "setWantsBestResolutionOpenGLSurface:", TRUE);
 	let point = NSPoint {x: 20.0, y: 20.0 };
-	let cascadeTopLeftFromPoint = sel!("cascadeTopLeftFromPoint:");
-	let _: () = unsafe { msg!(window, cascadeTopLeftFromPoint, point) };
-
-	//[window setTitle:@"sup"];
-	let titleString: Id = unsafe { msg!(NSStringClass, stringWithUTF8String, cstr!("sup from Rust")) };
-	let setTitle = sel!("setTitle:");
-	let _: () = unsafe { msg!(window, setTitle, titleString) };
+	msg_void!(window, "cascadeTopLeftFromPoint:", point);
+	let title_string = msg_id!("NSString", "stringWithUTF8String:", cstr!("sup from Rust"));
+	msg_void!(window, "setTitle:", title_string);
 
 	//NSOpenGLPixelFormatAttribute glAttributes[] =
 	//{
@@ -187,7 +113,7 @@ fn main() {
 	//	NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersionLegacy, // or NSOpenGLProfileVersion3_2Core
 	//	0
 	//};
-	let glAttributes: [u32; 14] =
+	let gl_attributes: [u32; 14] =
         [
             8, 24,
             11, 8,
@@ -200,90 +126,74 @@ fn main() {
             0
         ];
 
-	//NSOpenGLPixelFormat * pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:glAttributes];
-	let NSOpenGLPixelFormatClass = class!("NSOpenGLPixelFormat");
-	let pixelFormatAlloc: Id = unsafe { msg!(NSOpenGLPixelFormatClass, alloc) };
-	let initWithAttributes = sel!("initWithAttributes:");
-	let pixelFormat: Id = unsafe { msg!(pixelFormatAlloc, initWithAttributes, glAttributes.as_ptr()) };
-	let _: () = unsafe { msg!(pixelFormat, autorelease) };
+	let pixel_dormat_alloc = msg_id!("NSOpenGLPixelFormat", alloc);
+	let pixel_dormat = msg_id!(pixel_dormat_alloc, "initWithAttributes:", gl_attributes.as_ptr());
+	msg_void!(pixel_dormat, autorelease);
 
-	//NSOpenGLContext * openGLContext = [[NSOpenGLContext alloc] initWithFormat:pixelFormat shareContext:nil];
-	let NSOpenGLContextClass = class!("NSOpenGLContext");
-	let openGLContextAlloc: Id = unsafe{ msg!(NSOpenGLContextClass, alloc) };
-	let initWithFormat = sel!("initWithFormat:shareContext:");
-	let openGLContext: Id = unsafe{msg!(openGLContextAlloc, initWithFormat, pixelFormat, NIL)};
-	let _: () = unsafe { msg!(openGLContext, autorelease) };
+	let opengl_context_alloc = msg_id!("NSOpenGLContext", alloc);
+	let opengl_context = msg_id!(opengl_context_alloc, "initWithFormat:shareContext:", pixel_dormat, NIL);
+	msg_void!(opengl_context, autorelease);
 
-	//[openGLContext setView:contentView];
-	let setView = sel!("setView:");
-	let _: () = unsafe { msg!(openGLContext, setView, contentView) };
+	msg_void!(opengl_context, "setView:", content_view);
+	msg_void!(window, "makeKeyAndOrderFront:", window);
 
-	//[window makeKeyAndOrderFront:window];
-	let makeKeyAndOrderFront = sel!("makeKeyAndOrderFront:");
-	let _: () = unsafe { msg!(window, makeKeyAndOrderFront, window) };
+	msg_void!(window, "setAcceptsMouseMovedEvents:", TRUE);
 
-	//[window setAcceptsMouseMovedEvents:YES];
-	let setAcceptsMouseMovedEvents = sel!("setAcceptsMouseMovedEvents:");
-	let _: () = unsafe { msg!(window, setAcceptsMouseMovedEvents, TRUE) };
-
-	//[window setBackgroundColor:[NSColor blackColor]];
-	let NSColorClass = class!("NSColor");
-    let blackColorSel = sel!("blackColor");
-	let blackColor: Id = unsafe { msg!(NSColorClass, blackColorSel) };
-	let setBackgroundColor = sel!("setBackgroundColor:");
-	let _: () = unsafe { msg!(window, setBackgroundColor, blackColor) };
+	let black_color = msg_id!("NSColor", "blackColor");
+	msg_void!(window, "setBackgroundColor:", black_color);
 
 	// TODO do we really need this?
-	//[NSApp activateIgnoringOtherApps:YES];
-	let activateIgnoringOtherApps = sel!("activateIgnoringOtherApps:");
-	let _: () = unsafe { msg!(NSApp, activateIgnoringOtherApps, TRUE) };
+	msg_void!(NSApp, "activateIgnoringOtherApps:", TRUE);
 
 	// explicit runloop
 	println!("Entering runloop!");
 
+    #[allow(non_snake_case)]
 	let NSDateClass = class!("NSDate");
-	let distantPastSel = sel!("distantPast");
-	let nextEventMatchingMaskSel = sel!("nextEventMatchingMask:untilDate:inMode:dequeue:");
-	let frameSel = sel!("frame");
-	let typeSel = sel!("type");
-	let buttonNumberSel = sel!("buttonNumber");
-	let keyCodeSel = sel!("keyCode");
-	let keyWindowSel = sel!("keyWindow");
-	let mouseLocationOutsideOfEventStreamSel = sel!("mouseLocationOutsideOfEventStream");
-	let convertRectToBackingSel = sel!("convertRectToBacking:");
-	let scrollingDeltaXSel = sel!("scrollingDeltaX");
-	let scrollingDeltaYSel = sel!("scrollingDeltaY");
-	let hasPreciseScrollingDeltasSel = sel!("hasPreciseScrollingDeltas");
-	let modifierFlagsSel = sel!("modifierFlags");
-	let charactersSel = sel!("characters");
-	let UTF8StringSel = sel!("UTF8String");
-	let sendEventSel = sel!("sendEvent:");
-	let updateWindowsSel = sel!("updateWindows");
-	let updateSel = sel!("update");
-	let makeCurrentContextSel = sel!("makeCurrentContext");
-	let flushBufferSel = sel!("flushBuffer");
+	let distant_past_sel= sel!("distantPast");
+	let next_event_matching_mask_sel= sel!("nextEventMatchingMask:untilDate:inMode:dequeue:");
+	let frame_sel = sel!("frame");
+    /*
+	let type_sel= sel!("type");
+	let button_number_sel= sel!("buttonNumber");
+	let key_code_sel= sel!("keyCode");
+	let key_window_sel= sel!("keyWindow");
+	let mouse_location_outside_of_event_stream_sel= sel!("mouseLocationOutsideOfEventStream");
+	let convert_rect_to_backing_sel= sel!("convertRectToBacking:");
+	let scrolling_delta_x_sel= sel!("scrollingDeltaX");
+	let scrolling_delta_y_sel= sel!("scrollingDeltaY");
+	let hasPreciseScrollingDeltas_sel= sel!("hasPreciseScrollingDeltas");
+	let modifier_flags_sel= sel!("modifierFlags");
+	let characters_sel= sel!("characters");
+	let utf8_string_sel= sel!("UTF8String");
+	let send_event_sel= sel!("sendEvent:");
+	let update_windows_sel= sel!("updateWindows");
+    */
+	let update_sel= sel!("update");
+	let make_current_context_sel= sel!("makeCurrentContext");
+	let flush_buffer_sel= sel!("flushBuffer");
 
 
     while TERMINATED.load(Ordering::Relaxed).not() {
         		//NSEvent * event = [NSApp nextEventMatchingMask:NSAnyEventMask untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES];
-		let distantPast: Id = unsafe{ msg!(NSDateClass, distantPastSel) };
-		let event: Id = unsafe { msg!(NSApp, nextEventMatchingMaskSel, NSUInteger(u32::MAX), distantPast, NSDefaultRunLoopMode, TRUE) };
+		let distantPast = msg_id!(NSDateClass, distant_past_sel);
+		let event = msg_id!(NSApp, next_event_matching_mask_sel, NSUInteger(u32::MAX), distantPast, NSDefaultRunLoopMode, TRUE);
 
         // EVENT HANDLING
 
 
 		// do runloop stuff
 		//[openGLContext update]; // probably we only need to do it when we resize the window
-        let _: () = unsafe { msg!(openGLContext, updateSel) };
+        msg_void!(opengl_context, update_sel);
 
 		//[openGLContext makeCurrentContext];
-        let _: () = unsafe { msg!(openGLContext, makeCurrentContextSel) };
+        msg_void!(opengl_context, make_current_context_sel);
 
 		//NSRect rect = [contentView frame];
-		let rect: NSRect = unsafe { msg!(contentView, frameSel) };
+		let rect: NSRect = msg!(content_view, frame_sel);
 
 		//rect = [contentView convertRectToBacking:rect];
-		let rect: NSRect = unsafe { msg!(contentView, frameSel, rect) };
+		let rect: NSRect = msg!(content_view, frame_sel, rect);
 
         unsafe { 
             gl::glViewport(0, 0, rect.size.width as i32, rect.size.height as i32);
@@ -301,13 +211,11 @@ fn main() {
         };
 
 		//[openGLContext flushBuffer];
-        let _: () = unsafe { msg!(openGLContext, flushBufferSel) };
+        msg_void!(opengl_context, flush_buffer_sel);
 
     }
 
 	println!("Gracefully terminated.");
 
-	//[pool drain];
-    let drain = sel!("drain");
-	let _: () = unsafe { msg!(pool, drain) };
+	msg_void!(pool, "drain");
 }
