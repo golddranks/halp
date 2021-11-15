@@ -1,4 +1,3 @@
-#![feature(c_unwind)]
 use std::{ops::Not, sync::atomic::{AtomicBool, AtomicU32, Ordering}};
 
 mod gl;
@@ -173,6 +172,7 @@ fn main() {
 	let make_current_context_sel= sel!("makeCurrentContext");
 	let flush_buffer_sel= sel!("flushBuffer");
 
+    let mut a = 0.0;
 
     while TERMINATED.load(Ordering::Relaxed).not() {
         		//NSEvent * event = [NSApp nextEventMatchingMask:NSAnyEventMask untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES];
@@ -203,12 +203,14 @@ fn main() {
             gl::glColor3f(1.0, 0.85, 0.35);
             gl::glBegin(gl::GL_TRIANGLES);
             {
-                gl::glVertex3f(  0.0,  0.6, 0.0);
+                gl::glVertex3f(  a,  0.6, 0.0);
                 gl::glVertex3f( -0.2, -0.3, 0.0);
-                gl::glVertex3f(  0.2, -0.3 ,0.0);
+                gl::glVertex3f(  0.2, -0.3-a/2. ,0.0);
             }
             gl::glEnd();
         };
+
+        a += 0.01;
 
 		//[openGLContext flushBuffer];
         msg_void!(opengl_context, flush_buffer_sel);
